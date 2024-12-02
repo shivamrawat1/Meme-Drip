@@ -2,12 +2,93 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inpainted Image</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/result.css') }}">
+    <!-- Embedded CSS to style the page -->
+    <style>
+        /* Reset styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Body styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            padding: 20px;
+            /* Center the main content horizontally and vertically */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Container for the result content */
+        .result-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 10px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Heading styling */
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.8rem;
+            text-align: center;
+        }
+
+        /* Image styling */
+        .result-container img {
+            max-width: 100%;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+        }
+
+        /* Button styling */
+        .button-container {
+            width: 100%;
+            max-width: 200px;
+        }
+
+        .button-container a {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .button-container a:hover {
+            background-color: #45a049;
+        }
+
+        .button-container a:active {
+            background-color: #3e8e41;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
 </head>
 <body>
-    <h1>Here is your inpainted image:</h1>
-    <img src="{{ url_for('output_image', filename=output_image) }}" alt="Inpainted Image">
+    <div class="result-container">
+        <h1>Here is your inpainted image:</h1>
+        <img src="{{ url_for('output_image', filename=output_image) }}" alt="Inpainted Image">
+        <div class="button-container">
+            <!-- Updated the endpoint name in url_for -->
+            <a href="{{ url_for('upload_file') }}">Edit Another Image</a>
+        </div>
+    </div>
 </body>
 </html>

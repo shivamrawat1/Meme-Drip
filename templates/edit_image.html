@@ -4,97 +4,144 @@
     <meta charset="UTF-8">
     <title>Edit Your Image</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_image.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/fabric@4.6.0/dist/fabric.min.js"></script>
 </head>
 <body>
-    <h2>Edit Your Image</h2>
-    <div id="canvasContainer">
-        <canvas id="imageCanvas"></canvas>
+    <div class="edit-container">
+        <h2>Edit Your Image</h2>
+        <div id="canvasContainer">
+            <canvas id="imageCanvas"></canvas>
+        </div>
+        <form id="promptForm" action="{{ url_for('process_image') }}" method="post">
+            <input type="hidden" name="image_filename" value="{{ image_filename }}">
+            <input type="hidden" name="mask_data" id="maskData"> <!-- For mask data -->
+            <label for="prompt">Modify the prompt according to your preference:</label>
+            <input type="text" name="prompt" id="prompt" value=
+            "A realistic [type of clothing, e.g., T-shirt, jeans] with its original color and texture intact. The fabric looks natural, with a seamlessly added quote: '[INSERT QUOTE]' on the [specific location, e.g., center/front/side]. The text aligns with the fabric's folds, using a [font style, e.g., sans-serif] and [text color, e.g., bold white], blending naturally as if part of the garment." required>
+            <button type="submit">Generate</button>
+        </form>
+        
+        <p>Select a clothing piece on the image to apply your quote.</p>
     </div>
-    <form id="promptForm" action="{{ url_for('process_image') }}" method="post">
-        <input type="hidden" name="image_filename" value="{{ image_filename }}">
-        <input type="hidden" name="mask_data" id="maskData"> <!-- For mask data -->
-        <label for="prompt">Enter your prompt:</label>
-        <input type="text" name="prompt" id="prompt" required>
-        <button type="submit">Generate</button>
-    </form>
-    <p>Select an area on the image to apply your changes.</p>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const canvas = new fabric.Canvas('imageCanvas');
-
-            // Load the uploaded image onto the canvas
+            const imageFilename = "{{ image_filename }}";
             const imageUrl = "{{ url_for('uploaded_file', filename=image_filename) }}";
-            fabric.Image.fromURL(imageUrl, function(img) {
-                img.set({ selectable: false });
-                canvas.setWidth(img.width);
-                canvas.setHeight(img.height);
-                canvas.add(img);
-            });
 
-            // Disable free drawing mode and enable rectangle selection
-            canvas.isDrawingMode = false;
+            const canvas = document.getElementById('imageCanvas');
+            const ctx = canvas.getContext('2d');
 
-            let rect, isDown, origX, origY;
+            let segmentationMask = [];
+            let uniqueLabels = [];
+            let segmentColors = {};
+            let selectedLabel = null;
 
-            // Mouse down event to start drawing a rectangle
-            canvas.on('mouse:down', function(o) {
-                isDown = true;
-                const pointer = canvas.getPointer(o.e);
-                origX = pointer.x;
-                origY = pointer.y;
+            // Load the original image
+            const originalImage = new Image();
+            originalImage.crossOrigin = "Anonymous";
+            originalImage.src = imageUrl;
+            originalImage.onload = function() {
+                canvas.width = originalImage.width;
+                canvas.height = originalImage.height;
 
-                rect = new fabric.Rect({
-                    left: origX,
-                    top: origY,
-                    originX: 'left',
-                    originY: 'top',
-                    width: pointer.x - origX,
-                    height: pointer.y - origY,
-                    fill: 'rgba(255, 255, 255, 0.5)',  // transparent white fill
-                    selectable: false
-                });
-                canvas.add(rect);
-            });
+                // Draw the original image onto the canvas
+                ctx.drawImage(originalImage, 0, 0);
 
-            // Mouse move event to resize the rectangle while dragging
-            canvas.on('mouse:move', function(o) {
-                if (!isDown) return;
-                const pointer = canvas.getPointer(o.e);
+                // Fetch the segmentation mask
+                fetch(`/get_segmentation_mask/${imageFilename}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            console.error(data.error);
+                            return;
+                        }
 
-                if (pointer.x < origX) {
-                    rect.set({ left: Math.abs(pointer.x) });
+                        segmentationMask = data.mask;
+                        uniqueLabels = [...new Set(segmentationMask.flat())];
+
+                        // Assign colors to each label
+                        uniqueLabels.forEach(label => {
+                            const r = Math.floor(Math.random() * 255);
+                            const g = Math.floor(Math.random() * 255);
+                            const b = Math.floor(Math.random() * 255);
+                            segmentColors[label] = `rgba(${r}, ${g}, ${b}, 0.5)`;
+                        });
+
+                        // Draw the segmentation overlays
+                        drawSegments();
+                    });
+            };
+
+            // Function to draw segmentation overlays
+            function drawSegments() {
+                ctx.drawImage(originalImage, 0, 0);
+
+                const width = canvas.width;
+                const height = canvas.height;
+                const imageData = ctx.getImageData(0, 0, width, height);
+                const data = imageData.data;
+
+                // Create an overlay
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const label = segmentationMask[y][x];
+                        if (label !== null) {
+                            const index = (y * width + x) * 4;
+                            const color = segmentColors[label];
+                            const [r, g, b, a] = color.match(/\d+(\.\d+)?/g).map(Number);
+
+                            if (selectedLabel === null || label === selectedLabel) {
+                                // Apply color to the segment
+                                data[index] = (data[index] * (1 - a)) + (r * a);
+                                data[index + 1] = (data[index + 1] * (1 - a)) + (g * a);
+                                data[index + 2] = (data[index + 2] * (1 - a)) + (b * a);
+                            } else {
+                                // Dim other segments
+                                data[index] = data[index] * 0.5;
+                                data[index + 1] = data[index + 1] * 0.5;
+                                data[index + 2] = data[index + 2] * 0.5;
+                            }
+                        }
+                    }
                 }
-                if (pointer.y < origY) {
-                    rect.set({ top: Math.abs(pointer.y) });
+
+                ctx.putImageData(imageData, 0, 0);
+            }
+
+            // Function to get the label at a specific pixel
+            function getLabelAtPosition(x, y) {
+                const canvasRect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / canvasRect.width;
+                const scaleY = canvas.height / canvasRect.height;
+
+                const canvasX = Math.floor((x - canvasRect.left) * scaleX);
+                const canvasY = Math.floor((y - canvasRect.top) * scaleY);
+
+                if (canvasY >= 0 && canvasY < segmentationMask.length && canvasX >= 0 && canvasX < segmentationMask[0].length) {
+                    return segmentationMask[canvasY][canvasX];
                 }
+                return null;
+            }
 
-                rect.set({ width: Math.abs(origX - pointer.x) });
-                rect.set({ height: Math.abs(origY - pointer.y) });
-
-                canvas.renderAll();
+            // Handle canvas click event
+            canvas.addEventListener('click', function(event) {
+                const label = getLabelAtPosition(event.clientX, event.clientY);
+                if (label !== null) {
+                    selectedLabel = label;
+                    drawSegments();
+                    console.log('Selected segment:', selectedLabel);
+                    // Save the selected label in the hidden input
+                    document.getElementById('maskData').value = selectedLabel;
+                }
             });
 
-            // Mouse up event to finish drawing the rectangle
-            canvas.on('mouse:up', function(o) {
-                isDown = false;
-                // Rectangle drawn - save the mask area (coordinates)
-                const maskData = {
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height
-                };
-                // Save the mask data in the hidden input for the form
-                document.getElementById('maskData').value = JSON.stringify(maskData);
-            });
-
-            // When submitting the form, include the mask data
+            // Handle form submission
             document.getElementById('promptForm').addEventListener('submit', function (event) {
-                event.preventDefault();
-                // Submit the form
-                this.submit();
+                const maskDataValue = document.getElementById('maskData').value;
+                if (!maskDataValue) {
+                    alert('Please select a segment before submitting.');
+                    event.preventDefault();
+                }
             });
         });
     </script>
