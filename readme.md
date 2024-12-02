@@ -1,4 +1,4 @@
-I am a Beginner Hacker
+I am a Beginner Hacker.
 Tracks I am going for:
 
 - best overall yay :3 ($100 + snack boxes and random swag)
